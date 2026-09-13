@@ -1,0 +1,27 @@
+{
+  "name": "নোটিশ জেনারেটর — লৎসর দক্ষিণ পাড়া যুব সমাজ মানব কল্যাণ সংস্থা",
+  "short_name": "নোটিশ জেনারেটর",
+  "description": "সংস্থার অফিসিয়াল নোটিশ তৈরি, সংরক্ষণ ও পিডিএফ ডাউনলোড করার অ্যাপ",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#faf7ee",
+  "theme_color": "#152a5e",
+  "lang": "bn",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>নোটিশ জেনারেটর — লৎসর দক্ষিণ পাড়া যুব সমাজ মানব কল্যাণ সংস্থা</title>
+<meta name="description" content="সংস্থার অফিসিয়াল নোটিশ তৈরি, সংরক্ষণ ও পিডিএফ ডাউনলোড করার অ্যাপ">
+<meta name="theme-color" content="#152a5e">
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<!-- Google Fonts: Bengali — a curated set of free, professional Bengali fonts
+     the user can switch between for the notice content -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&family=Noto+Serif+Bengali:wght@400;600;700;800&family=Hind+Siliguri:wght@400;500;600;700&family=Baloo+Da+2:wght@400;500;600;700;800&family=Tiro+Bangla:ital@0;1&family=Mina:wght@400;700&family=Galada&family=Atma:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============ TOP APP BAR ============ -->
+<header class="appbar">
+  <div class="appbar-inner">
+    <div class="appbar-title">
+      <span class="appbar-title-main">নোটিশ জেনারেটর</span>
+      <span class="appbar-title-sub">লৎসর দক্ষিণ পাড়া যুব সমাজ মানব কল্যাণ সংস্থা</span>
+    </div>
+    <div class="appbar-actions">
+      <button id="btnHistory" class="icon-btn" title="নোটিশ ইতিহাস" aria-label="নোটিশ ইতিহাস">🗂️</button>
+      <button id="btnSettings" class="icon-btn" title="সেটিংস / ডাটা ম্যানেজমেন্ট" aria-label="সেটিংস">⚙️</button>
+    </div>
+  </div>
+</header>
+
+<!-- ============ MAIN TAB NAV (mobile) ============ -->
+<nav class="tabbar" id="tabbar">
+  <button class="tab-btn active" data-tab="editor">✍️ এডিটর</button>
+  <button class="tab-btn" data-tab="preview">👁️ প্রিভিউ</button>
+</nav>
+
+<main class="app-main">
+
+  <!-- ============ EDITOR PANEL ============ -->
+  <section class="panel editor-panel active" id="panel-editor">
+
+    <div class="panel-scroll">
+
+      <div class="toolbar-row">
+        <button id="btnNew" class="btn btn-outline">🆕 নতুন নোটিশ</button>
+        <span id="editingBadge" class="editing-badge hidden">এডিট মোডে</span>
+      </div>
+
+      <!-- Notice info -->
+      <fieldset class="card">
+        <legend>নোটিশের তথ্য</legend>
+
+        <div class="field">
+          <label for="noticeType">নোটিশের ধরন</label>
+          <select id="noticeType" class="input">
+            <option value="জরুরী নোটিশ">জরুরী নোটিশ</option>
+            <option value="গুরুত্বপূর্ণ নোটিশ">গুরুত্বপূর্ণ নোটিশ</option>
+            <option value="সাধারণ নোটিশ">সাধারণ নোটিশ</option>
+            <option value="বিশেষ নোটিশ">বিশেষ নোটিশ</option>
+            <option value="বিজ্ঞপ্তি">বিজ্ঞপ্তি</option>
+            <option value="জরুরী বিজ্ঞপ্তি">জরুরী বিজ্ঞপ্তি</option>
+            <option value="সভার নোটিশ">সভার নোটিশ</option>
+            <option value="সাধারণ সভার নোটিশ">সাধারণ সভার নোটিশ</option>
+            <option value="সদস্যদের জন্য নোটিশ">সদস্যদের জন্য নোটিশ</option>
+            <option value="দাওয়াতপত্র">দাওয়াতপত্র</option>
+            <option value="ঘোষণা">ঘোষণা</option>
+            <option value="নির্দেশনা">নির্দেশনা</option>
+            <option value="স্মরণীয় বিজ্ঞপ্তি">স্মরণীয় বিজ্ঞপ্তি</option>
+            <option value="শোক বার্তা">শোক বার্তা</option>
+            <option value="__custom__">✏️ Custom Title (নিজের মতো লিখুন)</option>
+          </select>
+        </div>
+
+        <div class="field hidden" id="customTitleField">
+          <label for="customTitle">নিজের শিরোনাম লিখুন</label>
+          <input type="text" id="customTitle" class="input" placeholder="যেমনঃ বার্ষিক সাধারণ সভা">
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="noticeDate">তারিখ</label>
+            <input type="date" id="noticeDate" class="input">
+          </div>
+          <div class="field">
+            <label for="noticeSource">সূত্র <span class="opt">(ঐচ্ছিক)</span></label>
+            <input type="text" id="noticeSource" class="input" placeholder="যেমনঃ পরিচালনা কমিটির সিদ্ধান্ত">
+          </div>
+        </div>
+      </fieldset>
+
+      <!-- Notice content -->
+      <fieldset class="card">
+        <legend>নোটিশ বিবরণ</legend>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="contentFontSelect">বাংলা ফন্ট</label>
+            <select id="contentFontSelect" class="input">
+              <option value="sans">Noto Sans Bengali (সাধারণ, আধুনিক)</option>
+              <option value="serif">Noto Serif Bengali (প্রথাগত, ফরমাল)</option>
+              <option value="hind">Hind Siliguri (ঝকঝকে, ক্লিন)</option>
+              <option value="baloo">Baloo Da 2 (বোল্ড, গোলাকার)</option>
+              <option value="tiro">Tiro Bangla (এলিগেন্ট সেরিফ)</option>
+              <option value="mina">Mina (সাধারণ, হিউম্যানিস্ট)</option>
+              <option value="galada">Galada (ডেকোরেটিভ, স্টাইলিশ)</option>
+              <option value="atma">Atma (হাতের লেখার স্টাইল)</option>
+            </select>
+          </div>
+          <div class="field field-color">
+            <label for="contentColorInput">টেক্সট কালার</label>
+            <input type="color" id="contentColorInput" class="input color-input" value="#1c1c1c" title="লেখা সিলেক্ট করে রং পরিবর্তন করুন">
+          </div>
+        </div>
+
+        <div class="editor-toolbar" id="contentToolbar">
+          <button type="button" data-cmd="bold" class="fmt-btn" title="Bold"><b>B</b></button>
+          <button type="button" data-cmd="italic" class="fmt-btn" title="Italic"><i>I</i></button>
+          <span class="fmt-sep"></span>
+          <button type="button" data-cmd="justifyLeft" class="fmt-btn" title="বামে সারিবদ্ধ">⇤</button>
+          <button type="button" data-cmd="justifyCenter" class="fmt-btn" title="মাঝে সারিবদ্ধ">↔</button>
+          <button type="button" data-cmd="justifyRight" class="fmt-btn" title="ডানে সারিবদ্ধ">⇥</button>
+          <span class="fmt-sep"></span>
+          <button type="button" data-cmd="insertUnorderedList" class="fmt-btn" title="বুলেট লিস্ট">• ―</button>
+          <span class="fmt-sep"></span>
+          <select id="fontSizeSelect" class="fmt-select" title="ফন্ট সাইজ">
+            <option value="3">সাধারণ</option>
+            <option value="4">মাঝারি</option>
+            <option value="5">বড়</option>
+            <option value="2">ছোট</option>
+          </select>
+        </div>
+        <div id="noticeContent" class="content-editable" contenteditable="true" data-placeholder="এখানে নোটিশের মূল বিষয়বস্তু লিখুন..."></div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="watermarkEnabled" checked>
+          <span>নোটিশের মাঝে সংস্থার লোগো ওয়াটারমার্ক দেখান</span>
+        </label>
+      </fieldset>
+
+      <!-- Authorization / signature -->
+      <fieldset class="card">
+        <legend>অনুমোদন / স্বাক্ষর অংশ</legend>
+
+        <div class="segmented" id="sigModeSegmented">
+          <button type="button" class="seg-btn" data-val="none">নেই</button>
+          <button type="button" class="seg-btn" data-val="orgOnly">শুধু সংস্থার নাম</button>
+          <button type="button" class="seg-btn active" data-val="detailed">বিস্তারিত (আদেশক্রমে)</button>
+        </div>
+
+        <div id="sigDetailedFields">
+          <div class="field">
+            <label for="sigType">শেষ অংশের ধরন</label>
+            <select id="sigType" class="input">
+              <option value="আদেশক্রমে">আদেশক্রমে</option>
+              <option value="অনুরোধক্রমে">অনুরোধক্রমে</option>
+              <option value="নির্দেশক্রমে">নির্দেশক্রমে</option>
+              <option value="সভাপতির নির্দেশক্রমে">সভাপতির নির্দেশক্রমে</option>
+              <option value="সাধারণ সম্পাদকের নির্দেশক্রমে">সাধারণ সম্পাদকের নির্দেশক্রমে</option>
+              <option value="কর্তৃপক্ষের নির্দেশক্রমে">কর্তৃপক্ষের নির্দেশক্রমে</option>
+              <option value="ব্যবস্থাপনা কমিটির পক্ষে">ব্যবস্থাপনা কমিটির পক্ষে</option>
+              <option value="__custom__">✏️ Custom</option>
+            </select>
+          </div>
+
+          <div class="field hidden" id="sigCustomField">
+            <label for="sigCustomLabel">নিজের মতো লিখুন</label>
+            <input type="text" id="sigCustomLabel" class="input" placeholder="যেমনঃ কার্যকরী পরিষদের সিদ্ধান্তক্রমে">
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="sigName">নাম</label>
+              <input type="text" id="sigName" class="input" placeholder="মোঃ ___________">
+            </div>
+            <div class="field">
+              <label for="sigDesignation">পদবি</label>
+              <input type="text" id="sigDesignation" class="input" placeholder="সাধারণ সম্পাদক">
+            </div>
+          </div>
+        </div>
+
+        <p class="hint hidden" id="sigOrgOnlyHint">শুধু সংস্থার নাম নোটিশের নিচে দেখানো হবে — আলাদা নাম/পদবি লাগবে না।</p>
+      </fieldset>
+
+      <!-- Footer -->
+      <fieldset class="card">
+        <legend>
+          ফুটার তথ্য <span class="opt">(ঐচ্ছিক)</span>
+          <label class="switch">
+            <input type="checkbox" id="footerEnabled">
+            <span class="slider"></span>
+          </label>
+        </legend>
+        <div id="footerFieldsWrap" class="hidden">
+          <div class="field">
+            <label for="footerContact">যোগাযোগ</label>
+            <input type="text" id="footerContact" class="input" placeholder="যোগাযোগঃ নাম">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="footerPhone">ফোন</label>
+              <input type="text" id="footerPhone" class="input" placeholder="০১৭XXXXXXXX">
+            </div>
+            <div class="field">
+              <label for="footerAddress">ঠিকানা</label>
+              <input type="text" id="footerAddress" class="input" placeholder="ঠিকানা">
+            </div>
+          </div>
+        </div>
+      </fieldset>
+
+      <div class="spacer-bottom"></div>
+    </div>
+
+    <!-- Sticky action bar -->
+    <div class="sticky-actions">
+      <button id="btnSave" class="btn btn-primary">💾 সেভ করুন</button>
+      <button id="btnPdf" class="btn btn-accent">⬇️ PDF ডাউনলোড</button>
+      <button id="btnPrint" class="btn btn-outline">🖨️ প্রিন্ট করুন</button>
+    </div>
+  </section>
+
+  <!-- ============ PREVIEW PANEL ============ -->
+  <section class="panel preview-panel" id="panel-preview">
+    <div class="preview-scroll">
+      <div class="a4-wrapper">
+        <div class="notice-a4" id="noticeA4">
+
+          <div class="notice-bismillah" id="bismillahLine">বিসমিল্লাহির রাহমানির রাহিম</div>
+
+          <div class="notice-header">
+            <div class="notice-logo-box">
+              <img id="previewLogoImg" src="assets/logo-header.jpg" alt="লোগো">
+            </div>
+            <div class="notice-org-box">
+              <div class="notice-org-name" id="previewOrgName"></div>
+            </div>
+          </div>
+
+          <div class="notice-location-band">
+            <span id="previewOrgLocation"></span>
+          </div>
+
+          <div class="notice-body">
+
+            <div class="notice-meta-row">
+              <div class="notice-source" id="previewSourceWrap">
+                <span class="meta-label">সূত্র:</span> <span id="previewSource"></span>
+              </div>
+              <div class="notice-date">
+                <span class="meta-label">তারিখ:</span> <span id="previewDate"></span>
+              </div>
+            </div>
+
+            <div class="notice-title-wrap">
+              <h1 class="notice-title" id="previewTitle">নোটিশ</h1>
+              <div class="notice-title-underline"></div>
+            </div>
+
+            <div class="notice-content-area">
+              <img id="previewWatermark" class="notice-watermark hidden" alt="">
+              <div class="notice-content" id="previewContent"></div>
+            </div>
+
+            <div class="notice-sig-area" id="previewSigArea">
+              <div class="notice-sig-label" id="previewSigLabel">আদেশক্রমে:-</div>
+              <div class="notice-sig-name" id="previewSigName"></div>
+              <div class="notice-sig-designation" id="previewSigDesignation"></div>
+            </div>
+
+          </div>
+
+          <div class="notice-footer" id="previewFooterBand">
+            <div class="notice-footer-text" id="previewFooterText"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="modal-overlay hidden" id="settingsModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>সেটিংস ও ডাটা ম্যানেজমেন্ট</h3>
+      <button class="icon-btn" id="btnCloseSettings">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="settings-org-info">
+        <strong>সংস্থার নাম:</strong> <span id="settingsOrgName"></span><br>
+        <strong>ঠিকানা:</strong> <span id="settingsOrgLocation"></span>
+        <p class="hint">এই তথ্য পরিবর্তন করতে হলে app.js ফাইলের CONFIG অংশ এডিট করুন। লোগো ও ওয়াটারমার্ক ছবিও অ্যাপে আগে থেকেই সেট করা আছে।</p>
+      </div>
+      <hr>
+      <button id="btnExportData" class="btn btn-outline btn-block">⬇️ ডাটা এক্সপোর্ট করুন (JSON)</button>
+      <label class="btn btn-outline btn-block file-btn">
+        ⬆️ ডাটা ইমপোর্ট করুন
+        <input type="file" id="importFileInput" accept="application/json" class="hidden-file">
+      </label>
+      <button id="btnClearData" class="btn btn-danger btn-block">🗑️ সব ডাটা মুছে ফেলুন</button>
+      <p class="hint">সব তথ্য শুধুমাত্র আপনার ব্রাউজারে (IndexedDB) সংরক্ষিত থাকে। কোনো সার্ভারে পাঠানো হয় না।</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HISTORY MODAL ============ -->
+<div class="modal-overlay hidden" id="historyModal">
+  <div class="modal-box modal-box-lg">
+    <div class="modal-head">
+      <h3>নোটিশ ইতিহাস</h3>
+      <button class="icon-btn" id="btnCloseHistory">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="search" id="historySearch" class="input" placeholder="🔍 খুঁজুন...">
+      <div id="historyList" class="history-list">
+        <!-- injected -->
+      </div>
+      <div id="historyEmpty" class="empty-state hidden">
+        <p>এখনো কোনো নোটিশ সংরক্ষণ করা হয়নি।</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CONFIRM MODAL ============ -->
+<div class="modal-overlay hidden" id="confirmModal">
+  <div class="modal-box modal-box-sm">
+    <div class="modal-body">
+      <p id="confirmMessage" class="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="btnConfirmYes" class="btn btn-danger">হ্যাঁ</button>
+        <button id="btnConfirmCancel" class="btn btn-outline">বাতিল</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- ============ HIDDEN PDF RENDER ROOT ============ -->
+<div id="pdfRenderRoot" class="pdf-render-root" aria-hidden="true"></div>
+
+<!-- Libraries for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script src="app.js"></script>
+</body>
+</html>

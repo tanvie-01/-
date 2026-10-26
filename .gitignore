@@ -1,0 +1,12 @@
+# dependencies
+node_modules/
+
+# poster-studio stand-alone build (the real build goes to bengali-notice-app/poster/)
+poster-studio/dist/
+*.local
+
+# local backups
+*.zip
+
+.DS_Store
+Thumbs.db

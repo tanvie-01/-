@@ -47,8 +47,15 @@ button, input, select, textarea{ font-family: inherit; }
 }
 .appbar-inner{
   max-width: 1400px; margin:0 auto;
-  display:flex; align-items:center; justify-content:space-between;
+  display:grid; align-items:center; gap: 8px 12px;
+  grid-template-columns: minmax(0,1fr) auto;
+  grid-template-areas: "brand actions" "nav nav";
   padding: 10px 14px;
+}
+.appbar-brand{ grid-area: brand; display:flex; align-items:center; gap:10px; min-width:0; }
+.appbar-logo{
+  width:38px; height:38px; border-radius:50%; background:#fff; object-fit:cover;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.55); flex-shrink:0;
 }
 .appbar-title{ display:flex; flex-direction:column; line-height:1.25; overflow:hidden; }
 .appbar-title-main{ font-weight:700; font-size: 16px; }
@@ -56,7 +63,51 @@ button, input, select, textarea{ font-family: inherit; }
   font-size: 11px; opacity:.85;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width: 70vw;
 }
-.appbar-actions{ display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.appbar-actions{ grid-area: actions; justify-self:end; display:flex; align-items:center; gap:8px; flex-shrink:0; }
+
+/* Section switcher: নোটিশ ↔ পোস্টার স্টুডিও */
+.section-nav{
+  grid-area: nav;
+  display:flex; gap:4px; padding:4px;
+  background: rgba(255,255,255,.12); border-radius: 12px;
+}
+.section-tab{
+  flex:1; display:flex; align-items:center; justify-content:center; gap:7px;
+  padding: 8px 16px; border-radius: 9px;
+  color: rgba(255,255,255,.82); text-decoration:none;
+  font-weight:700; font-size: 14px; white-space:nowrap;
+  transition: background .15s, color .15s;
+}
+.section-tab:hover{ color:#fff; background: rgba(255,255,255,.1); }
+.section-tab.active{ background:#fff; color: var(--navy); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+
+@media (min-width: 760px){
+  .appbar-inner{
+    grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+    grid-template-areas: "brand nav actions";
+  }
+  .section-tab{ flex:0 0 auto; min-width: 150px; }
+}
+/* Small phones: a single compact row (logo · switcher · actions) */
+@media (max-width: 559px){
+  .appbar-inner{
+    grid-template-columns: auto minmax(0,1fr) auto;
+    grid-template-areas: "brand nav actions";
+    padding: 8px 10px;
+  }
+  .appbar-title, .tab-long{ display:none; }
+  .section-tab{ padding: 8px 6px; font-size: 13.5px; gap:5px; }
+  .appbar-actions{ gap:6px; }
+  .appbar-actions .icon-btn{ width:36px; height:36px; }
+}
+
+/* Poster Studio fills everything below the app bar */
+.poster-section{ height: calc(100vh - var(--appbar-h, 110px)); height: calc(100dvh - var(--appbar-h, 110px)); }
+.poster-section iframe{ display:block; width:100%; height:100%; border:0; background: var(--ui-bg); }
+body.section-poster{ overflow:hidden; }
+body.section-poster .tabbar,
+body.section-poster .app-main,
+body.section-poster #noticeActions{ display:none !important; }
 .icon-btn{
   background: rgba(255,255,255,.12); border:none; color:#fff;
   width:38px; height:38px; border-radius:50%; font-size:16px;
@@ -69,7 +120,7 @@ button, input, select, textarea{ font-family: inherit; }
    TAB BAR (mobile switch between editor/preview)
    ========================================================= */
 .tabbar{
-  position: sticky; top: 57px; z-index: 39;
+  position: sticky; top: var(--appbar-h, 57px); z-index: 39;
   display:flex; background:#fff; border-bottom: 1px solid var(--ui-border);
 }
 .tab-btn{
@@ -100,8 +151,8 @@ button, input, select, textarea{ font-family: inherit; }
   }
   .panel{ display:block !important; }
   .editor-panel, .preview-panel{
-    position: sticky; top: 70px;
-    max-height: calc(100vh - 90px);
+    position: sticky; top: calc(var(--appbar-h, 58px) + 12px);
+    max-height: calc(100vh - var(--appbar-h, 58px) - 32px);
     overflow:auto;
     border-radius: var(--radius);
   }
@@ -244,7 +295,16 @@ select.input{ appearance: auto; }
   background: #fff; border-top: 1px solid var(--ui-border);
   z-index: 20;
 }
-.sticky-actions .btn{ flex:1; font-size:13px; padding: 11px 8px; }
+.sticky-actions .btn{ flex:1; min-width:0; font-size:13px; padding: 11px 6px; white-space:nowrap; }
+@media (max-width:400px){
+  .sticky-actions{ gap:6px; padding-left:10px; padding-right:10px; }
+  .sticky-actions .btn{ font-size:12px; padding: 11px 4px; gap:4px; }
+}
+
+.page-count-hint{
+  margin: 8px 0 0; padding: 8px 12px; border-radius: 8px;
+  background: #eef3ff; color: var(--navy); font-size: 12.5px; font-weight:600;
+}
 
 @media (min-width:1000px){
   .sticky-actions{ position:relative; }
@@ -268,6 +328,17 @@ select.input{ appearance: auto; }
   flex-direction:column;
   transform-origin: top center;
 }
+
+/* A paginated page (PDF / image / print / multi-page preview) is exactly
+   one A4 sheet tall; the paginator in app.js guarantees content fits. */
+.notice-page{ height: 297mm; }
+.notice-page-no{
+  position:absolute; top: 2mm; right: 14mm;
+  font-family: var(--font-body); font-size: 9.5pt; font-weight:600; color: #777;
+}
+.notice-body{ position: relative; }
+
+.paged-preview{ flex-direction: column; align-items: center; gap: 14px; }
 
 /* scale down to fit small screens, keep crisp A4 proportions.
    transform-origin is "top center", so scaling only leaves phantom
@@ -448,6 +519,12 @@ select.input{ appearance: auto; }
 .confirm-actions{ display:flex; gap:10px; }
 .confirm-actions .btn{ flex:1; }
 
+.image-preview-list{ display:flex; flex-direction:column; gap:10px; margin-bottom: 14px; }
+.image-preview-list img{
+  width:100%; height:auto; border:1px solid var(--ui-border); border-radius: 6px;
+  -webkit-touch-callout: default; /* allow long-press "Save image" on iOS */
+}
+
 /* =========================================================
    TOAST
    ========================================================= */
@@ -481,10 +558,14 @@ select.input{ appearance: auto; }
 }
 @media print{
   @page{ size: A4 portrait; margin:0; }
-  body *{ visibility:hidden; }
-  #printArea, #printArea *{ visibility:visible; }
-  #printArea{
-    position:absolute; top:0; left:0; width:210mm; min-height:297mm;
+  /* display:none (not just visibility:hidden) so the app UI takes no
+     space — otherwise a tall editor adds blank trailing sheets */
+  body > *:not(#printArea){ display:none !important; }
+  body{ background:#fff; }
+  #printArea{ position:static; width:210mm; }
+  #printArea .notice-a4{
     transform:none !important; margin:0 !important; box-shadow:none !important;
+    break-after: page; page-break-after: always;
   }
+  #printArea .notice-a4:last-child{ break-after: auto; page-break-after: auto; }
 }

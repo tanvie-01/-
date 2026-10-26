@@ -142,14 +142,19 @@ function escapeHtml(str) {
 }
 
 function sanitizeContentHtml(html) {
-  // Basic sanitize: strip script/style/iframe/on* attributes.
+  // Basic sanitize: strip script/style/iframe/on* attributes and
+  // javascript:/vbscript: URLs (e.g. from an imported backup file).
   // Inline color/formatting spans from execCommand are kept intentionally.
-  const tmp = document.createElement("div");
+  // Parsed in an inert document so nothing (e.g. <img onerror>) runs while sanitizing.
+  const tmp = document.implementation.createHTMLDocument("").createElement("div");
   tmp.innerHTML = html || "";
-  tmp.querySelectorAll("script,style,iframe,object,embed").forEach(el => el.remove());
+  tmp.querySelectorAll("script,style,iframe,object,embed,base,form,meta,link").forEach(el => el.remove());
   tmp.querySelectorAll("*").forEach(el => {
     [...el.attributes].forEach(attr => {
       if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+      else if (/^\s*(javascript|vbscript):/i.test(attr.value.replace(/[\s\u0000-\u001f]/g, ""))) {
+        el.removeAttribute(attr.name);
+      }
     });
   });
   return tmp.innerHTML;
@@ -230,6 +235,7 @@ const state = {
   editingId: null,     // null = creating new notice
   sigMode: "detailed",  // 'none' | 'orgOnly' | 'detailed'
   savedContentRange: null, // last text selection inside the content editor, used by the color picker
+  imageFiles: [],          // [{blob, name, url}] for the image-save modal
 };
 
 /* =========================================================================
@@ -359,6 +365,8 @@ function renderPreview() {
   } else {
     els.previewWatermark.classList.add("hidden");
   }
+
+  schedulePagedPreview();
 }
 
 function renderSignaturePreview() {
@@ -523,7 +531,7 @@ function fillFormFromData(data) {
   els.customTitle.value = data.customTitle || "";
   els.noticeDate.value = data.date || todayISO();
   els.noticeSource.value = data.source || "";
-  els.noticeContent.innerHTML = data.contentHtml || "";
+  els.noticeContent.innerHTML = sanitizeContentHtml(data.contentHtml);
   els.contentFontSelect.value = data.contentFont || DEFAULT_CONTENT_FONT;
 
   setSigMode(resolveSigMode(data));
@@ -576,8 +584,9 @@ async function saveNotice() {
     return;
   }
 
+  const isNew = !state.editingId;
   let record;
-  if (state.editingId) {
+  if (!isNew) {
     const existing = await dbGet(STORE_NOTICES, state.editingId);
     record = Object.assign({}, existing, data, { updatedAt: now });
   } else {
@@ -592,7 +601,7 @@ async function saveNotice() {
   await dbPut(STORE_NOTICES, record);
   updateSaveButtonLabel();
   els.editingBadge.classList.remove("hidden");
-  toast(state.editingId ? "নোটিশ সংরক্ষণ করা হয়েছে" : "নোটিশ সেভ হয়েছে");
+  toast(isNew ? "নোটিশ সেভ হয়েছে" : "নোটিশ সংরক্ষণ করা হয়েছে");
   await refreshHistoryList();
 }
 
@@ -600,7 +609,7 @@ async function saveNotice() {
    HISTORY (opened via the top app-bar icon, shown in a modal)
    ========================================================================= */
 function plainTextSnippet(html, len = 90) {
-  const tmp = document.createElement("div");
+  const tmp = document.implementation.createHTMLDocument("").createElement("div");
   tmp.innerHTML = html || "";
   const text = tmp.textContent || "";
   return text.length > len ? text.slice(0, len) + "…" : text;
@@ -644,6 +653,7 @@ async function refreshHistoryList(filterText = "") {
         <button class="btn btn-outline" data-act="edit" data-id="${n.id}">✏️ এডিট</button>
         <button class="btn btn-outline" data-act="dup" data-id="${n.id}">📄 ডুপ্লিকেট</button>
         <button class="btn btn-accent" data-act="pdf" data-id="${n.id}">⬇️ PDF</button>
+        <button class="btn btn-outline" data-act="img" data-id="${n.id}">🖼️ ছবি</button>
         <button class="btn btn-danger" data-act="del" data-id="${n.id}">🗑️ মুছুন</button>
       </div>
     `;
@@ -696,6 +706,9 @@ function bindHistoryEvents() {
     else if (act === "pdf") {
       const rec = await dbGet(STORE_NOTICES, id);
       if (rec) await exportRecordAsPdf(rec);
+    } else if (act === "img") {
+      const rec = await dbGet(STORE_NOTICES, id);
+      if (rec) await exportRecordAsImages(rec);
     }
   });
 
@@ -737,57 +750,40 @@ function bindTabbar() {
 }
 
 /* =========================================================================
-   BUILD A STANDALONE NOTICE HTML NODE (used for PDF export + print)
+   BUILD PAGINATED A4 NOTICE PAGES (used for PDF, image, print + preview)
    Renders directly from a stored record, independent of live form,
-   so History → PDF/Print works without loading the editor.
+   so History → PDF/Image works without loading the editor.
+
+   Long notices are split across real A4 pages: content is moved block by
+   block (and word by word inside a block that doesn't fit) into each page
+   until it would overflow, so no line is ever cut in half. Every page
+   gets the letterhead, watermark and footer; the date/title only appear
+   on page 1 and the signature only on the last page.
    ========================================================================= */
-function buildNoticeNode(record) {
-  const wrap = document.createElement("div");
-  wrap.className = "notice-a4";
-  wrap.style.transform = "none";
-  wrap.style.margin = "0";
-
-  const title = record.noticeType === "__custom__" ? (record.customTitle || "নোটিশ") : record.resolvedTitle;
-  const sigLabel = record.sigType === "__custom__" ? record.sigCustomLabel : record.sigType;
-  const sigMode = resolveSigMode(record);
-  const contentFontStack = FONT_STACKS[record.contentFont] || FONT_STACKS[DEFAULT_CONTENT_FONT];
-
+function noticeFooterText(record) {
   const footerBits = [];
   if (record.footerEnabled) {
     if (record.footerContact) footerBits.push(`যোগাযোগ: ${record.footerContact}`);
     if (record.footerPhone) footerBits.push(`ফোন: ${record.footerPhone}`);
     if (record.footerAddress) footerBits.push(`ঠিকানা: ${record.footerAddress}`);
   }
+  return footerBits.join("   |   ");
+}
+
+function buildNoticePageShell(record, isFirstPage) {
+  const wrap = document.createElement("div");
+  wrap.className = "notice-a4 notice-page";
+  wrap.style.transform = "none";
+  wrap.style.margin = "0";
+
+  const title = record.noticeType === "__custom__" ? (record.customTitle || "নোটিশ") : record.resolvedTitle;
+  const contentFontStack = FONT_STACKS[record.contentFont] || FONT_STACKS[DEFAULT_CONTENT_FONT];
 
   const watermarkHtml = record.watermarkEnabled
     ? `<img class="notice-watermark" src="${CONFIG.DEFAULT_WATERMARK_PATH}" alt="">`
     : "";
 
-  let sigHtml = "";
-  if (sigMode === "orgOnly") {
-    sigHtml = `
-      <div class="notice-sig-area sig-org-only">
-        <div class="notice-sig-name">${escapeHtml(CONFIG.ORG_NAME)}</div>
-      </div>`;
-  } else if (sigMode === "detailed") {
-    sigHtml = `
-      <div class="notice-sig-area">
-        <div class="notice-sig-label">${escapeHtml(sigLabel || "")}:-</div>
-        <div class="notice-sig-name">${escapeHtml(record.sigName || "")}</div>
-        <div class="notice-sig-designation">${record.sigDesignation ? escapeHtml(record.sigDesignation) + ", " + escapeHtml(CONFIG.ORG_NAME) : ""}</div>
-      </div>`;
-  }
-
-  wrap.innerHTML = `
-    ${CONFIG.SHOW_BISMILLAH_LINE ? `<div class="notice-bismillah">${escapeHtml(CONFIG.BISMILLAH_TEXT)}</div>` : ""}
-    <div class="notice-header">
-      <div class="notice-logo-box"><img src="${CONFIG.DEFAULT_LOGO_PATH}" alt="লোগো"></div>
-      <div class="notice-org-box">
-        <div class="notice-org-name">${escapeHtml(CONFIG.ORG_NAME)}</div>
-      </div>
-    </div>
-    <div class="notice-location-band"><span>${escapeHtml(CONFIG.ORG_LOCATION)}</span></div>
-    <div class="notice-body">
+  const firstPageHtml = isFirstPage ? `
       <div class="notice-meta-row">
         <div class="notice-source" style="visibility:${record.source ? "visible" : "hidden"}">
           <span class="meta-label">সূত্র:</span> <span>${escapeHtml(record.source || "")}</span>
@@ -797,20 +793,166 @@ function buildNoticeNode(record) {
       <div class="notice-title-wrap">
         <h1 class="notice-title">${escapeHtml(title)}</h1>
         <div class="notice-title-underline"></div>
+      </div>` : "";
+
+  wrap.innerHTML = `
+    ${isFirstPage && CONFIG.SHOW_BISMILLAH_LINE ? `<div class="notice-bismillah">${escapeHtml(CONFIG.BISMILLAH_TEXT)}</div>` : ""}
+    <div class="notice-header">
+      <div class="notice-logo-box"><img src="${CONFIG.DEFAULT_LOGO_PATH}" alt="লোগো"></div>
+      <div class="notice-org-box">
+        <div class="notice-org-name">${escapeHtml(CONFIG.ORG_NAME)}</div>
       </div>
+    </div>
+    <div class="notice-location-band"><span>${escapeHtml(CONFIG.ORG_LOCATION)}</span></div>
+    <div class="notice-body">
+      <div class="notice-page-no hidden"></div>
+      ${firstPageHtml}
       <div class="notice-content-area">
         ${watermarkHtml}
-        <div class="notice-content" style="font-family:${contentFontStack}">${record.contentHtml || ""}</div>
+        <div class="notice-content" style="font-family:${contentFontStack}"></div>
       </div>
-      ${sigHtml}
     </div>
-    <div class="notice-footer"><div class="notice-footer-text">${escapeHtml(footerBits.join("   |   "))}</div></div>
+    <div class="notice-footer"><div class="notice-footer-text">${escapeHtml(noticeFooterText(record))}</div></div>
   `;
   return wrap;
 }
 
+function buildSignatureNode(record) {
+  const sigMode = resolveSigMode(record);
+  if (sigMode === "none") return null;
+  const sig = document.createElement("div");
+  if (sigMode === "orgOnly") {
+    sig.className = "notice-sig-area sig-org-only";
+    sig.innerHTML = `<div class="notice-sig-name">${escapeHtml(CONFIG.ORG_NAME)}</div>`;
+  } else {
+    const sigLabel = record.sigType === "__custom__" ? record.sigCustomLabel : record.sigType;
+    sig.className = "notice-sig-area";
+    sig.innerHTML = `
+      <div class="notice-sig-label">${escapeHtml(sigLabel || "")}:-</div>
+      <div class="notice-sig-name">${escapeHtml(record.sigName || "")}</div>
+      <div class="notice-sig-designation">${record.sigDesignation ? escapeHtml(record.sigDesignation) + ", " + escapeHtml(CONFIG.ORG_NAME) : ""}</div>`;
+  }
+  return sig;
+}
+
+function pageOverflows(page) {
+  return page.scrollHeight > page.clientHeight + 1;
+}
+
+// Elements that can't be split across pages
+const UNSPLITTABLE_TAGS = new Set(["IMG", "BR", "HR", "TABLE", "SVG"]);
+
+// Moves as much of `source`'s children into `target` as fits on `page`.
+// A block that doesn't fit whole is split (recursively, keeping its
+// formatting wrapper on both sides); a text node is split between words.
+// Returns true when `source` has been fully consumed.
+function moveFittingNodes(target, source, page) {
+  while (source.firstChild) {
+    const node = source.firstChild;
+    target.appendChild(node);
+    if (!pageOverflows(page)) continue;
+    source.insertBefore(node, source.firstChild);
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      moveFittingWords(target, node, page);
+      return false;
+    }
+    if (node.nodeType === Node.ELEMENT_NODE && node.firstChild && !UNSPLITTABLE_TAGS.has(node.tagName)) {
+      const part = node.cloneNode(false);
+      target.appendChild(part);
+      const done = moveFittingNodes(part, node, page);
+      if (!part.firstChild) part.remove();
+      if (done) { node.remove(); continue; }
+    }
+    return false;
+  }
+  return true;
+}
+
+function moveFittingWords(target, textNode, page) {
+  const tokens = textNode.data.split(/(\s+)/);
+  const probe = document.createTextNode("");
+  target.appendChild(probe);
+  let lo = 0, hi = tokens.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    probe.data = tokens.slice(0, mid).join("");
+    if (pageOverflows(page)) hi = mid - 1; else lo = mid;
+  }
+  if (lo === 0) { probe.remove(); return; }
+  probe.data = tokens.slice(0, lo).join("");
+  textNode.data = tokens.slice(lo).join("").replace(/^\s+/, "");
+  if (!textNode.data) textNode.remove();
+}
+
+// Drop blank lines/whitespace that would otherwise open a new page
+function trimLeadingBlank(source) {
+  while (source.firstChild) {
+    const n = source.firstChild;
+    const blankText = n.nodeType === Node.TEXT_NODE && !n.data.trim();
+    const br = n.nodeName === "BR";
+    const emptyBlock = n.nodeType === Node.ELEMENT_NODE && !n.textContent.trim() && !n.querySelector("img");
+    if (blankText || br || emptyBlock) n.remove(); else break;
+  }
+}
+
+// Builds the pages inside `root`, which must be attached to the document
+// (laid out, unscaled) so pages can be measured. Returns the page nodes.
+function buildNoticePages(record, root) {
+  const source = document.createElement("div");
+  source.innerHTML = sanitizeContentHtml(record.contentHtml);
+
+  const pages = [];
+  const addPage = () => {
+    const page = buildNoticePageShell(record, pages.length === 0);
+    root.appendChild(page);
+    pages.push(page);
+    return page;
+  };
+
+  for (;;) {
+    const page = addPage();
+    const contentEl = page.querySelector(".notice-content");
+    if (pages.length > 1) trimLeadingBlank(source);
+    let done = moveFittingNodes(contentEl, source, page);
+    // Something too tall even for an empty continuation page: place it
+    // anyway (clipped) rather than looping forever.
+    if (!done && pages.length > 1 && !contentEl.firstChild) {
+      contentEl.appendChild(source.firstChild);
+      done = !source.firstChild;
+    }
+    if (done) break;
+  }
+
+  const sig = buildSignatureNode(record);
+  if (sig) {
+    const lastPage = pages[pages.length - 1];
+    lastPage.querySelector(".notice-body").appendChild(sig);
+    if (pageOverflows(lastPage)) {
+      // No room for the signature: start a new page and carry the last
+      // block over with it, so the signature never stands alone.
+      const prevContent = lastPage.querySelector(".notice-content");
+      const page = addPage();
+      const newContent = page.querySelector(".notice-content");
+      if (prevContent.childNodes.length > 1) newContent.appendChild(prevContent.lastChild);
+      page.querySelector(".notice-body").appendChild(sig);
+      if (pageOverflows(page) && newContent.firstChild) prevContent.appendChild(newContent.firstChild);
+    }
+  }
+
+  if (pages.length > 1) {
+    const total = toBengaliDigits(pages.length);
+    pages.forEach((page, i) => {
+      const no = page.querySelector(".notice-page-no");
+      no.textContent = `পৃষ্ঠা ${toBengaliDigits(i + 1)}/${total}`;
+      no.classList.remove("hidden");
+    });
+  }
+  return pages;
+}
+
 /* =========================================================================
-   PDF EXPORT (html2canvas -> jsPDF)
+   RENDER PAGES TO CANVAS (shared by PDF + image export)
    ========================================================================= */
 async function waitForFonts() {
   try {
@@ -833,76 +975,6 @@ async function waitForFonts() {
   } catch (e) { /* font API not supported — proceed anyway */ }
 }
 
-function buildPdfFilename(record) {
-  const typeSlug = TYPE_SLUG_MAP[record.noticeType] ||
-    sanitizeFilenamePart(record.resolvedTitle || record.customTitle || "Notice");
-  const dateSlug = formatDateAscii(record.date);
-  return `${CONFIG.ORG_SHORT_SLUG}_${typeSlug}_${dateSlug}.pdf`;
-}
-
-async function exportRecordAsPdf(record) {
-  toast("PDF তৈরি হচ্ছে...", 4000);
-  await waitForFonts();
-
-  const root = el("pdfRenderRoot");
-  root.innerHTML = "";
-  const node = buildNoticeNode(record);
-  root.appendChild(node);
-
-  // allow one frame for layout/fonts/images to settle
-  await new Promise(r => setTimeout(r, 60));
-  await waitForImagesLoaded(node);
-
-  try {
-    const canvas = await html2canvas(node, {
-      scale: 3,
-      useCORS: true,
-      backgroundColor: "#ffffff",
-      windowWidth: node.scrollWidth,
-      windowHeight: node.scrollHeight,
-    });
-
-    const imgData = canvas.toDataURL("image/jpeg", 0.97);
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
-    const pageWidth = 210;
-    const pageHeight = 297;
-    const rawImgHeight = (canvas.height * pageWidth) / canvas.width;
-
-    // Tolerance guards against a spurious near-empty 2nd page: html2canvas
-    // can render a handful of extra sub-pixels beyond exactly 297mm (from
-    // box-sizing/min-height rounding), which previously tipped the naive
-    // "imgHeight > pageHeight" check into pagination mode and produced a
-    // blank trailing page for perfectly ordinary, single-page notices.
-    const PAGE_OVERFLOW_TOLERANCE_MM = 5;
-
-    if (rawImgHeight <= pageHeight + PAGE_OVERFLOW_TOLERANCE_MM) {
-      const drawHeight = Math.min(rawImgHeight, pageHeight);
-      pdf.addImage(imgData, "JPEG", 0, 0, pageWidth, drawHeight);
-    } else {
-      // genuine multi-page pagination for unusually long content
-      let heightLeft = rawImgHeight;
-      let position = 0;
-      pdf.addImage(imgData, "JPEG", 0, position, pageWidth, rawImgHeight);
-      heightLeft -= pageHeight;
-      while (heightLeft > 0) {
-        position = heightLeft - rawImgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, position, pageWidth, rawImgHeight);
-        heightLeft -= pageHeight;
-      }
-    }
-
-    pdf.save(buildPdfFilename(record));
-    toast("PDF ডাউনলোড সম্পন্ন হয়েছে ✅");
-  } catch (err) {
-    console.error(err);
-    toast("PDF তৈরি করতে সমস্যা হয়েছে");
-  } finally {
-    root.innerHTML = "";
-  }
-}
-
 function waitForImagesLoaded(container) {
   const imgs = [...container.querySelectorAll("img")];
   return Promise.all(imgs.map(img => {
@@ -911,34 +983,223 @@ function waitForImagesLoaded(container) {
   }));
 }
 
-async function downloadCurrentFormAsPdf() {
+async function renderRecordToCanvases(record, scale) {
+  await waitForFonts();
+  const root = el("pdfRenderRoot");
+  root.innerHTML = "";
+  try {
+    const pages = buildNoticePages(record, root);
+    // allow one frame for layout/images to settle
+    await new Promise(r => setTimeout(r, 60));
+    await waitForImagesLoaded(root);
+    const canvases = [];
+    for (const page of pages) {
+      canvases.push(await html2canvas(page, {
+        scale,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        windowWidth: page.scrollWidth,
+        windowHeight: page.clientHeight,
+      }));
+    }
+    return canvases;
+  } finally {
+    root.innerHTML = "";
+  }
+}
+
+function buildFileBaseName(record) {
+  const typeSlug = TYPE_SLUG_MAP[record.noticeType] ||
+    sanitizeFilenamePart(record.resolvedTitle || record.customTitle || "Notice");
+  const dateSlug = formatDateAscii(record.date);
+  return `${CONFIG.ORG_SHORT_SLUG}_${typeSlug}_${dateSlug}`;
+}
+
+function buildPdfFilename(record) {
+  return `${buildFileBaseName(record)}.pdf`;
+}
+
+/* =========================================================================
+   PDF EXPORT (html2canvas -> jsPDF, one canvas per A4 page)
+   ========================================================================= */
+async function exportRecordAsPdf(record) {
+  toast("PDF তৈরি হচ্ছে...", 4000);
+  try {
+    const canvases = await renderRecordToCanvases(record, 3);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+    canvases.forEach((canvas, i) => {
+      if (i > 0) pdf.addPage();
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.97), "JPEG", 0, 0, 210, 297);
+    });
+    pdf.save(buildPdfFilename(record));
+    toast(canvases.length > 1
+      ? `PDF ডাউনলোড সম্পন্ন হয়েছে (${toBengaliDigits(canvases.length)} পৃষ্ঠা) ✅`
+      : "PDF ডাউনলোড সম্পন্ন হয়েছে ✅");
+  } catch (err) {
+    console.error(err);
+    toast("PDF তৈরি করতে সমস্যা হয়েছে");
+  }
+}
+
+function hasContentToExport() {
   if (els.noticeContent.textContent.trim() === "") {
     toast("দয়া করে নোটিশের বিষয়বস্তু লিখুন");
-    return;
+    return false;
   }
-  const record = collectFormData();
-  await exportRecordAsPdf(record);
+  return true;
+}
+
+async function downloadCurrentFormAsPdf() {
+  if (!hasContentToExport()) return;
+  await exportRecordAsPdf(collectFormData());
+}
+
+/* =========================================================================
+   IMAGE EXPORT (one PNG per page, shown in a modal so mobile users can
+   save to gallery / share with a fresh tap, or long-press the image)
+   ========================================================================= */
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(b => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png");
+  });
+}
+
+function clearImageFiles() {
+  state.imageFiles.forEach(f => URL.revokeObjectURL(f.url));
+  state.imageFiles = [];
+  el("imagePreviewList").innerHTML = "";
+}
+
+async function exportRecordAsImages(record) {
+  toast("ছবি তৈরি হচ্ছে...", 4000);
+  try {
+    const canvases = await renderRecordToCanvases(record, 2);
+    const base = buildFileBaseName(record);
+    clearImageFiles();
+    for (let i = 0; i < canvases.length; i++) {
+      const blob = await canvasToBlob(canvases[i]);
+      const name = canvases.length > 1 ? `${base}_page${i + 1}.png` : `${base}.png`;
+      state.imageFiles.push({ blob, name, url: URL.createObjectURL(blob) });
+    }
+    const list = el("imagePreviewList");
+    state.imageFiles.forEach(f => {
+      const img = document.createElement("img");
+      img.src = f.url;
+      img.alt = f.name;
+      list.appendChild(img);
+    });
+    const files = state.imageFiles.map(f => new File([f.blob], f.name, { type: "image/png" }));
+    const canShare = !!(navigator.canShare && navigator.canShare({ files }));
+    el("btnImageShare").classList.toggle("hidden", !canShare);
+    el("imageModal").classList.remove("hidden");
+    el("toast").classList.add("hidden");
+  } catch (err) {
+    console.error(err);
+    toast("ছবি তৈরি করতে সমস্যা হয়েছে");
+  }
+}
+
+async function downloadImageFiles() {
+  for (const f of state.imageFiles) {
+    const a = document.createElement("a");
+    a.href = f.url;
+    a.download = f.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // small gap so browsers don't drop back-to-back downloads
+    await new Promise(r => setTimeout(r, 400));
+  }
+  toast("ছবি সেভ হয়েছে ✅");
+}
+
+async function shareImageFiles() {
+  const files = state.imageFiles.map(f => new File([f.blob], f.name, { type: "image/png" }));
+  try {
+    await navigator.share({ files, title: "নোটিশ" });
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      console.error(err);
+      toast("শেয়ার করা যায়নি — ছবি সেভ করুন বাটন ব্যবহার করুন");
+    }
+  }
+}
+
+function closeImageModal() {
+  el("imageModal").classList.add("hidden");
+  clearImageFiles();
+}
+
+function bindImageModal() {
+  el("btnImageDownload").addEventListener("click", downloadImageFiles);
+  el("btnImageShare").addEventListener("click", shareImageFiles);
+  el("btnCloseImage").addEventListener("click", closeImageModal);
+  el("imageModal").addEventListener("click", (e) => {
+    if (e.target === el("imageModal")) closeImageModal();
+  });
+}
+
+async function saveCurrentFormAsImage() {
+  if (!hasContentToExport()) return;
+  await exportRecordAsImages(collectFormData());
+}
+
+/* =========================================================================
+   PAGED PREVIEW — when the notice runs past one page, the preview panel
+   shows the exact pages the PDF/image/print will have (debounced).
+   ========================================================================= */
+let pagedPreviewTimer = null;
+function schedulePagedPreview() {
+  clearTimeout(pagedPreviewTimer);
+  pagedPreviewTimer = setTimeout(updatePagedPreview, 300);
+}
+
+function updatePagedPreview() {
+  const measureRoot = el("previewMeasureRoot");
+  const pagedWrap = el("pagedPreview");
+  measureRoot.innerHTML = "";
+  const pages = buildNoticePages(collectFormData(), measureRoot);
+  const multiPage = pages.length > 1;
+
+  pagedWrap.innerHTML = "";
+  if (multiPage) {
+    pages.forEach(page => {
+      // let the responsive .notice-a4 scaling rules apply on screen
+      page.style.transform = "";
+      page.style.margin = "";
+      pagedWrap.appendChild(page);
+    });
+  }
+  measureRoot.innerHTML = "";
+  pagedWrap.classList.toggle("hidden", !multiPage);
+  el("singlePreview").classList.toggle("hidden", multiPage);
+  el("pageCountHint").textContent = multiPage
+    ? `📄 নোটিশটি ${toBengaliDigits(pages.length)} পৃষ্ঠার হবে — প্রিভিউতে সব পৃষ্ঠা দেখুন`
+    : "";
+  el("pageCountHint").classList.toggle("hidden", !multiPage);
 }
 
 /* =========================================================================
    PRINT
    ========================================================================= */
-function printCurrentForm() {
-  if (els.noticeContent.textContent.trim() === "") {
-    toast("দয়া করে নোটিশের বিষয়বস্তু লিখুন");
-    return;
-  }
+async function printCurrentForm() {
+  if (!hasContentToExport()) return;
   const record = collectFormData();
-  const node = buildNoticeNode(record);
-  node.id = "printArea";
+  await waitForFonts();
 
   const old = document.getElementById("printArea");
   if (old) old.remove();
 
-  document.body.appendChild(node);
+  const area = document.createElement("div");
+  area.id = "printArea";
+  document.body.appendChild(area);
+  buildNoticePages(record, area);
+  await waitForImagesLoaded(area);
+
   setTimeout(() => {
     window.print();
-    setTimeout(() => node.remove(), 500);
+    setTimeout(() => area.remove(), 500);
   }, 120);
 }
 
@@ -977,6 +1238,7 @@ async function importDataFromFile(file) {
 
     for (const n of payload.notices) {
       if (!n.id) n.id = uid();
+      n.contentHtml = sanitizeContentHtml(n.contentHtml);
       await dbPut(STORE_NOTICES, n);
     }
     await refreshHistoryList();
@@ -1030,7 +1292,74 @@ function bindMainButtons() {
 
   el("btnSave").addEventListener("click", saveNotice);
   el("btnPdf").addEventListener("click", downloadCurrentFormAsPdf);
+  el("btnImage").addEventListener("click", saveCurrentFormAsImage);
   el("btnPrint").addEventListener("click", printCurrentForm);
+}
+
+/* =========================================================================
+   SECTION NAV — নোটিশ ↔ পোস্টার স্টুডিও
+   Poster Studio (built into ./poster/) runs in an iframe that is created on
+   first visit and then kept alive, so switching sections is instant and
+   never loses the notice or poster being edited. The URL hash (#poster)
+   makes the browser/phone back button and bookmarks work.
+   ========================================================================= */
+const SECTIONS = {
+  notice: { title: "নোটিশ জেনারেটর" },
+  poster: { title: "পোস্টার স্টুডিও" },
+};
+
+function sectionFromHash() {
+  const name = location.hash.replace("#", "");
+  return SECTIONS[name] ? name : null;
+}
+
+function showSection(name) {
+  const isPoster = name === "poster";
+  document.body.classList.toggle("section-poster", isPoster);
+  el("posterSection").classList.toggle("hidden", !isPoster);
+  document.querySelectorAll(".section-tab").forEach(tab => {
+    const active = tab.dataset.section === name;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  el("appbarTitleMain").textContent = SECTIONS[name].title;
+  document.title = `${SECTIONS[name].title} — ${CONFIG.ORG_NAME}`;
+
+  if (isPoster) {
+    const frame = el("posterFrame");
+    if (!frame.getAttribute("src")) frame.setAttribute("src", "poster/index.html?embedded=1");
+  }
+  try { localStorage.setItem("activeSection", name); } catch (e) { /* storage blocked */ }
+}
+
+// Keeps --appbar-h in sync so sticky bars and the poster section sit right below the header
+function trackAppbarHeight() {
+  const bar = el("appbar");
+  const set = () => document.documentElement.style.setProperty("--appbar-h", `${bar.offsetHeight}px`);
+  set();
+  if ("ResizeObserver" in window) new ResizeObserver(set).observe(bar);
+  else window.addEventListener("resize", set);
+}
+
+function bindSectionNav() {
+  trackAppbarHeight();
+  // switch immediately on click; the hash update keeps back-button support
+  document.querySelectorAll(".section-tab").forEach(tab => {
+    tab.addEventListener("click", (e) => {
+      e.preventDefault();
+      const name = tab.dataset.section;
+      if (sectionFromHash() !== name && !(name === "notice" && !location.hash)) location.hash = name;
+      showSection(name);
+    });
+  });
+  window.addEventListener("hashchange", () => showSection(sectionFromHash() || "notice"));
+  let initial = sectionFromHash();
+  if (!initial) {
+    try { initial = localStorage.getItem("activeSection"); } catch (e) { initial = null; }
+    if (!SECTIONS[initial]) initial = "notice";
+    if (initial === "poster") history.replaceState(null, "", "#poster");
+  }
+  showSection(initial);
 }
 
 /* =========================================================================
@@ -1056,13 +1385,17 @@ async function init() {
   bindLiveInputs();
   bindContentToolbar();
   bindSigModeSegmented();
-  bindHistoryEvents
+  bindHistoryEvents();
   bindHistoryModal();
   bindTabbar();
   bindSettingsModal();
+  bindImageModal();
   bindMainButtons();
+  bindSectionNav();
 
   resetForm();
+  // page breaks depend on font metrics — re-measure once web fonts arrive
+  if (document.fonts) document.fonts.ready.then(schedulePagedPreview);
   registerServiceWorker();
 }
 

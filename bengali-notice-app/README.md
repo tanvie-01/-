@@ -5,6 +5,13 @@ notices for **লৎসর দক্ষিণ পাড়া যুব সম�
 exactly like a printed notice, saving them locally (IndexedDB), and
 downloading/printing them as high-quality A4 PDFs.
 
+It has two sections, switched from the menu at the top of the app:
+
+- **📄 নোটিশ** — the notice generator described in this README.
+- **🎨 পোস্টার স্টুডিও** — a poster designer (congratulations, welcome,
+  greetings, events, awards, announcements, birthdays …) with templates,
+  photo cropping, editable text and design elements. See section 12.
+
 No backend, no database server, no login. Everything lives in your browser.
 
 ---
@@ -19,11 +26,14 @@ bengali-notice/
 ├── manifest.json         → PWA manifest (name, icons, theme color, standalone mode)
 ├── service-worker.js     → Offline caching (app shell + CDN libraries)
 ├── assets/
-│   ├── logo-header.png    → Fixed header logo (shown in every notice's header box)
+│   ├── logo-header.jpg    → Fixed header logo (shown in every notice's header box)
 │   └── logo-watermark.png → Fixed watermark image (shown faintly behind the notice content)
 ├── icons/
 │   ├── icon-192.png       → App icon (192×192) — replace with your real logo-based icon later
 │   └── icon-512.png       → App icon (512×512)
+├── poster/               → Poster Studio section — BUILD OUTPUT, do not edit by hand
+│                            (source lives in ../poster-studio, see section 12)
+├── tests/                → End-to-end tests for both sections (section 11)
 └── README.md              → This file
 ```
 
@@ -59,7 +69,7 @@ const CONFIG = {
   ORG_SHORT_SLUG: "Latsor_Sangstha",   // used only in PDF filenames (ASCII)
   SHOW_BISMILLAH_LINE: true,
   BISMILLAH_TEXT: "বিসমিল্লাহির রাহমানির রাহিম",
-  DEFAULT_LOGO_PATH: "assets/logo-header.png",
+  DEFAULT_LOGO_PATH: "assets/logo-header.jpg",
   DEFAULT_WATERMARK_PATH: "assets/logo-watermark.png",
 };
 ```
@@ -72,7 +82,7 @@ on the main notice page.
 The logo (shown in the header of every notice) and the watermark (shown
 faintly behind the notice content) are also fixed, bundled images now —
 not something uploaded from the form. To change either one later, just
-replace the image files at `assets/logo-header.png` and
+replace the image files at `assets/logo-header.jpg` and
 `assets/logo-watermark.png` with new images using those exact filenames.
 
 ## 4. How the history/storage works
@@ -175,10 +185,15 @@ worker/PWA install feature to work.
 7. Watch the **live preview** update as you type. On phones, switch to the
    "প্রিভিউ" tab to see it full-screen; on desktop it sits right next to
    the editor.
-8. Tap **সেভ করুন** to store the notice, **PDF ডাউনলোড** for a print-ready
-   PDF, or **প্রিন্ট করুন** to print directly.
+8. Tap **সেভ করুন** to store the notice, **PDF** for a print-ready A4 PDF,
+   **ছবি** to save it as a PNG image (on mobile: save to gallery, share,
+   or long-press the image), or **প্রিন্ট** to print directly.
+   Long notices are split into proper A4 pages automatically: no line is
+   cut in half, every page keeps the header/watermark/footer and a page
+   number, and the signature goes on the last page. The preview shows the
+   exact pages before you download.
 9. Tap the **🗂️ history icon** in the top bar any time to edit, duplicate,
-   delete, or re-download any past notice.
+   delete, or re-download (PDF or image) any past notice.
 
 The organization's logo (in the header) and watermark image are fixed and
 built into the app already — see section 3 above if you ever need to swap
@@ -204,3 +219,46 @@ the app's navy/green/red color scheme. Replace them with a proper icon
 based on your real organization logo whenever convenient — just keep the
 same filenames (`icon-192.png`, `icon-512.png`) and the same square
 dimensions, and the manifest will pick them up automatically.
+
+## 11. Running the tests
+
+End-to-end checks run in headless Chromium:
+
+- `tests/e2e.js` — Notice App: live preview, save/update, history
+  (edit/duplicate/delete/search), PDF/image export, multi-page layout,
+  print, backup export/import, HTML sanitization and the service worker.
+- `tests/poster.e2e.js` — Poster Studio: categories and templates, text
+  editing/auto-fit, photo upload in many sizes, crop/zoom/resize without
+  distortion, design elements, undo/redo, export, save/restore, data from
+  the older Poster Studio, mobile layout, and the top-menu integration.
+
+They need Node.js:
+
+```bash
+cd tests
+npm install
+npx playwright install chromium   # first time only
+npm test                          # both suites (or npm run test:notice / test:poster)
+```
+
+## 12. Poster Studio (🎨 পোস্টার স্টুডিও)
+
+Poster Studio is a React app whose **source is in `../poster-studio`**. Its
+production build is written straight into `./poster/` here, and the Notice
+App opens it in the 🎨 section (an iframe that stays loaded, so switching
+sections is instant and keeps your work). Because the build output is part of
+this folder, deploying this folder deploys both sections — nothing else is
+needed on the server.
+
+After changing anything in `../poster-studio/src`, rebuild:
+
+```bash
+cd ../poster-studio
+npm install        # first time only
+npm run build      # → ../bengali-notice-app/poster/
+```
+
+`npm run dev` there starts a live-reloading dev server for Poster Studio on
+its own. How templates, slots and elements work is described in
+`../poster-studio/README.md`. The direct link `index.html#poster` opens the
+app on Poster Studio (also offered as an app-icon shortcut when installed).

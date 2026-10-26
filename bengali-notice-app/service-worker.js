@@ -17,7 +17,7 @@
      network layer entirely.
 */
 
-const CACHE_VERSION = "bn-notice-v3";
+const CACHE_VERSION = "bn-notice-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -26,8 +26,13 @@ const APP_SHELL = [
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./assets/logo-header.png",
-  "./assets/logo-watermark.png"
+  "./assets/logo-header.jpg",
+  "./assets/logo-watermark.png",
+  // Poster Studio section (build output of ../poster-studio, stable file names)
+  "./poster/index.html",
+  "./poster/assets/poster-studio.js",
+  "./poster/assets/index.css",
+  "./poster/assets/logo.jpg"
 ];
 
 self.addEventListener("install", (event) => {

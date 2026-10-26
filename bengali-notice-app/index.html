@@ -22,18 +22,40 @@
 <body>
 
 <!-- ============ TOP APP BAR ============ -->
-<header class="appbar">
+<header class="appbar" id="appbar">
   <div class="appbar-inner">
-    <div class="appbar-title">
-      <span class="appbar-title-main">নোটিশ জেনারেটর</span>
-      <span class="appbar-title-sub">লৎসর দক্ষিণ পাড়া যুব সমাজ মানব কল্যাণ সংস্থা</span>
+    <div class="appbar-brand">
+      <img class="appbar-logo" src="assets/logo-header.jpg" alt="">
+      <div class="appbar-title">
+        <span class="appbar-title-main" id="appbarTitleMain">নোটিশ জেনারেটর</span>
+        <span class="appbar-title-sub">লৎসর দক্ষিণ পাড়া যুব সমাজ মানব কল্যাণ সংস্থা</span>
+      </div>
     </div>
-    <div class="appbar-actions">
+
+    <!-- Switch between the two sections of the app -->
+    <nav class="section-nav" id="sectionNav" role="tablist" aria-label="অ্যাপের অংশ">
+      <a class="section-tab active" href="#notice" data-section="notice" role="tab" aria-selected="true">
+        <span aria-hidden="true">📄</span><span>নোটিশ</span>
+      </a>
+      <a class="section-tab" href="#poster" data-section="poster" role="tab" aria-selected="false">
+        <span aria-hidden="true">🎨</span><span>পোস্টার<span class="tab-long"> স্টুডিও</span></span>
+      </a>
+    </nav>
+
+    <div class="appbar-actions" id="noticeActions">
       <button id="btnHistory" class="icon-btn" title="নোটিশ ইতিহাস" aria-label="নোটিশ ইতিহাস">🗂️</button>
       <button id="btnSettings" class="icon-btn" title="সেটিংস / ডাটা ম্যানেজমেন্ট" aria-label="সেটিংস">⚙️</button>
     </div>
   </div>
 </header>
+
+<!-- ============ POSTER STUDIO SECTION ============
+     Built from ../poster-studio (React) into ./poster/. Loaded on first visit
+     to the section and kept alive afterwards, so switching back and forth is
+     instant and keeps the poster being edited. -->
+<section class="poster-section hidden" id="posterSection" aria-label="পোস্টার স্টুডিও">
+  <iframe id="posterFrame" title="পোস্টার স্টুডিও" allow="web-share; clipboard-write"></iframe>
+</section>
 
 <!-- ============ MAIN TAB NAV (mobile) ============ -->
 <nav class="tabbar" id="tabbar">
@@ -137,6 +159,7 @@
           </select>
         </div>
         <div id="noticeContent" class="content-editable" contenteditable="true" data-placeholder="এখানে নোটিশের মূল বিষয়বস্তু লিখুন..."></div>
+        <p class="page-count-hint hidden" id="pageCountHint"></p>
 
         <label class="checkbox-row">
           <input type="checkbox" id="watermarkEnabled" checked>
@@ -222,15 +245,16 @@
     <!-- Sticky action bar -->
     <div class="sticky-actions">
       <button id="btnSave" class="btn btn-primary">💾 সেভ করুন</button>
-      <button id="btnPdf" class="btn btn-accent">⬇️ PDF ডাউনলোড</button>
-      <button id="btnPrint" class="btn btn-outline">🖨️ প্রিন্ট করুন</button>
+      <button id="btnPdf" class="btn btn-accent">⬇️ PDF</button>
+      <button id="btnImage" class="btn btn-accent">🖼️ ছবি</button>
+      <button id="btnPrint" class="btn btn-outline">🖨️ প্রিন্ট</button>
     </div>
   </section>
 
   <!-- ============ PREVIEW PANEL ============ -->
   <section class="panel preview-panel" id="panel-preview">
     <div class="preview-scroll">
-      <div class="a4-wrapper">
+      <div class="a4-wrapper" id="singlePreview">
         <div class="notice-a4" id="noticeA4">
 
           <div class="notice-bismillah" id="bismillahLine">বিসমিল্লাহির রাহমানির রাহিম</div>
@@ -283,6 +307,8 @@
 
         </div>
       </div>
+      <!-- Filled by app.js with the real A4 pages when the notice runs past one page -->
+      <div class="a4-wrapper paged-preview hidden" id="pagedPreview"></div>
     </div>
   </section>
 
@@ -346,10 +372,27 @@
 </div>
 
 <!-- ============ TOAST ============ -->
+<!-- ============ IMAGE SAVE MODAL ============ -->
+<div class="modal-overlay hidden" id="imageModal">
+  <div class="modal-box modal-box-lg">
+    <div class="modal-head">
+      <h3>🖼️ নোটিশের ছবি</h3>
+      <button class="icon-btn" id="btnCloseImage">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="imagePreviewList" class="image-preview-list"></div>
+      <button id="btnImageDownload" class="btn btn-accent btn-block">⬇️ ছবি সেভ করুন</button>
+      <button id="btnImageShare" class="btn btn-outline btn-block hidden">📤 শেয়ার / গ্যালারিতে সেভ</button>
+      <p class="hint">মোবাইলে ছবির উপর আঙুল চেপে ধরে রেখেও সরাসরি গ্যালারিতে সেভ করতে পারবেন।</p>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast hidden"></div>
 
 <!-- ============ HIDDEN PDF RENDER ROOT ============ -->
 <div id="pdfRenderRoot" class="pdf-render-root" aria-hidden="true"></div>
+<div id="previewMeasureRoot" class="pdf-render-root" aria-hidden="true"></div>
 
 <!-- Libraries for PDF export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>

@@ -1,0 +1,12 @@
+{
+  "name": "bengali-notice-app-tests",
+  "private": true,
+  "scripts": {
+    "test": "node e2e.js && node poster.e2e.js",
+    "test:notice": "node e2e.js",
+    "test:poster": "node poster.e2e.js"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0"
+  }
+}
